@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # Author: Viacheslav Lotsmanov <lotsmanov89@gmail.com>
-# License: GNU/GPLv3 (TODO uri of license file)
+# License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/gpaste-gui/master/LICENSE
 # Rewritten previous implementation https://github.com/unclechu/gpaste-zenity
 # vim: se et ts=2 sts=2 sw=2 :
 use v5.24; use strict; use warnings;
