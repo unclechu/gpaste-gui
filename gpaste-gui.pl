@@ -26,6 +26,7 @@ my @available_modes = qw(
   mask-last-password
   rename-password
   select-and-rename-password
+  heal
   choose
 );
 
@@ -356,6 +357,7 @@ sub choose_action {
     ['Select password and mask with name', 'mask-password'],
     ['Rename password',                    'rename-password'],
     ['Select password and rename',         'select-and-rename-password'],
+    ['Heal clipboard',                     'heal'],
   );
 
   unless ($select_by_numbers) {
@@ -567,6 +569,25 @@ sub select_and_rename_a_password {
     }
 }
 
+sub heal_clipboard {
+  my %history = get_history;
+  guard_non_empty_history \%history;
+
+  if (scalar(@{$history{all}}) >= 2) {
+    safe_run `$gpaste_bin select 1`;
+    safe_run `$gpaste_bin select 1`;
+  } else {
+    safe_run system
+      $gpaste_bin, 'add', '--',
+      "--gpaste-gui.pl heal clipboard plug @{[time(), rand()]}--";
+
+    safe_run `$gpaste_bin select 1`;
+    safe_run `$gpaste_bin delete 1`;
+  }
+
+  end_gtk_main
+}
+
 %actions = (
   'choose' => \&choose_action,
   'select' => \&select_from_history,
@@ -576,6 +597,7 @@ sub select_and_rename_a_password {
   'mask-last-password' => \&mask_last_password,
   'rename-password' => \&rename_a_password,
   'select-and-rename-password' => \&select_and_rename_a_password,
+  'heal' => \&heal_clipboard,
 );
 
 if (defined $gpaste_bin) {
@@ -623,5 +645,12 @@ gpaste-gui.pl [options]
         "select-and-rename-password"
           to select a password from history (only passwords are shown)
           and give it a new name
+        "heal"
+          to swap **twice** last two items from history
+          (so the history would look like nothing happened).
+          Sometimes I can't paste to terminal and to Vim from "+ register,
+          `xsel -o` returns nothing, like the buffer is empty
+          (I don't know yet why and in which case it happens),
+          this simple hack fixes this issue.
         "choose" to show GUI menu to choose one of these modes
 =cut
