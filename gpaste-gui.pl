@@ -27,6 +27,7 @@ my @available_modes = qw(
   rename-password
   select-and-rename-password
   heal
+  tmux
   choose
 );
 
@@ -358,6 +359,7 @@ sub choose_action {
     ['Rename password',                    'rename-password'],
     ['Select password and rename',         'select-and-rename-password'],
     ['Heal clipboard',                     'heal'],
+    ['Copy from tmux',                     'tmux'],
   );
 
   unless ($select_by_numbers) {
@@ -588,6 +590,19 @@ sub heal_clipboard {
   end_gtk_main
 }
 
+sub add_from_tmux {
+  my $buffer = `tmux showb`;
+
+  dying_modal "Reading last tmux buffer is failed with status code: $?"
+    if ($? != 0) || !defined($buffer);
+
+  open(my $h, "|$gpaste_bin");
+  print $h $buffer;
+  close($h);
+
+  end_gtk_main
+}
+
 %actions = (
   'choose' => \&choose_action,
   'select' => \&select_from_history,
@@ -598,6 +613,7 @@ sub heal_clipboard {
   'rename-password' => \&rename_a_password,
   'select-and-rename-password' => \&select_and_rename_a_password,
   'heal' => \&heal_clipboard,
+  'tmux' => \&add_from_tmux,
 );
 
 if (defined $gpaste_bin) {
@@ -652,5 +668,6 @@ gpaste-gui.pl [options]
           `xsel -o` returns nothing, like the buffer is empty
           (I don't know yet why and in which case it happens),
           this simple hack fixes this issue.
+        "tmux" to copy last buffer from default tmux session
         "choose" to show GUI menu to choose one of these modes
 =cut
