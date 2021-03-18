@@ -59,7 +59,7 @@ let
 
   gpaste-gui = pkgs.callPackage gpaste-gui-src {};
 in
-{ environment.systemPackages = [ gpaste-gui-src ]; }
+{ environment.systemPackages = [ gpaste-gui ]; }
 ```
 
 # Author

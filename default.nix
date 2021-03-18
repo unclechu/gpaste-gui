@@ -2,7 +2,7 @@ let sources = import nix/sources.nix; in
 { callPackage
 , perl
 , perlPackages
-, gnome3
+, gnome3 # Just for ‘gnome3.gpaste’
 
 # Overridable dependencies
 , __nix-utils ? callPackage sources.nix-utils { inherit perlPackages; }
