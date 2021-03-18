@@ -1,8 +1,7 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
 # Author: Viacheslav Lotsmanov <lotsmanov89@gmail.com>
 # License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/gpaste-gui/master/LICENSE
 # Rewritten previous implementation https://github.com/unclechu/gpaste-zenity
-# vim: se et ts=2 sts=2 sw=2 :
 use v5.24; use strict; use warnings;
 use utf8; use open ':std', ':encoding(UTF-8)';
 use experimental qw/smartmatch/;

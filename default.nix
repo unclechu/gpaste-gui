@@ -1,8 +1,9 @@
 let sources = import nix/sources.nix; in
 { callPackage
 , perl
-, gnome3
 , perlPackages
+, which
+, gnome3
 
 # Overridable dependencies
 , __nix-utils ? callPackage sources.nix-utils { inherit perlPackages; }
@@ -17,6 +18,7 @@ let
     shellCheckers valueCheckers;
 
   perl-exe = "${perl}/bin/perl";
+  which-exe = "${which}/bin/which";
   gpaste-client = "${gnome3.gpaste}/bin/gpaste-client";
 
   deps = p: [
@@ -32,12 +34,14 @@ let
 
   checkPhase = ''
     ${shellCheckers.fileIsExecutable perl-exe}
+    ${shellCheckers.fileIsExecutable which-exe}
     ${shellCheckers.fileIsExecutable gpaste-client}
   '';
 
   perlScript = writeCheckedExecutable __name checkPhase ''
     #! ${perl-exe}
     use v5.24; use strict; use warnings;
+    $ENV{PATH} = q<${which}/bin:>.$ENV{PATH};
     $ENV{PATH} = q<${gnome3.gpaste}/bin:>.$ENV{PATH};
     ${__srcScript}
   '';
