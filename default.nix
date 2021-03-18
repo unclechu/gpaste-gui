@@ -2,7 +2,6 @@ let sources = import nix/sources.nix; in
 { callPackage
 , perl
 , perlPackages
-, which
 , gnome3
 
 # Overridable dependencies
@@ -14,11 +13,10 @@ let sources = import nix/sources.nix; in
 }:
 let
   inherit (__nix-utils)
-    esc writeCheckedExecutable wrapExecutableWithPerlDeps
+    esc lines unlines writeCheckedExecutable wrapExecutableWithPerlDeps
     shellCheckers valueCheckers;
 
   perl-exe = "${perl}/bin/perl";
-  which-exe = "${which}/bin/which";
   gpaste-client = "${gnome3.gpaste}/bin/gpaste-client";
 
   deps = p: [
@@ -34,16 +32,42 @@ let
 
   checkPhase = ''
     ${shellCheckers.fileIsExecutable perl-exe}
-    ${shellCheckers.fileIsExecutable which-exe}
     ${shellCheckers.fileIsExecutable gpaste-client}
   '';
 
+  patchedScript =
+    let
+      reducer = acc: line:
+        if ! isNull (builtins.match "^#!.*$" line) then (
+          acc
+        ) else if acc.state == "pre" then (
+          let matches = builtins.match "^(my \\$gpaste_bin) = .*$" line; in
+          if isNull matches
+          then acc // { lines = acc.lines ++ [line]; }
+          else {
+            state = "in";
+            lines = acc.lines ++ [
+              "${builtins.elemAt matches 0} = q{${gpaste-client}};"
+            ];
+          }
+        ) else if (acc.state == "in") then (
+          if isNull (builtins.match "^[^ ].*;$" line)
+          then acc
+          else acc // { state = "post"; }
+        ) else if (acc.state == "post") then (
+          acc // { lines = acc.lines ++ [line]; }
+        ) else throw "Unexpected state: ${acc.state}";
+
+      initial = { lines = []; state = "pre"; };
+
+      result = builtins.foldl' reducer initial (lines __srcScript);
+    in
+      assert result.state == "post";
+      unlines result.lines;
+
   perlScript = writeCheckedExecutable __name checkPhase ''
     #! ${perl-exe}
-    use v5.24; use strict; use warnings;
-    $ENV{PATH} = q<${which}/bin:>.$ENV{PATH};
-    $ENV{PATH} = q<${gnome3.gpaste}/bin:>.$ENV{PATH};
-    ${__srcScript}
+    ${patchedScript}
   '';
 in
 assert valueCheckers.isNonEmptyString __srcScript;
