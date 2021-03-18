@@ -2,9 +2,9 @@
 
 Simple and handy GUI for managing clipboard history of GPaste daemon.
 
-![Choose mode screenshot](./artwork/readme-choose-screenshot.png)
+![Choose mode screenshot](artwork/readme-choose-screenshot.png)
 
-![Select mode screenshot](./artwork/readme-select-screenshot.png)
+![Select mode screenshot](artwork/readme-select-screenshot.png)
 
 ## Usage
 
@@ -28,10 +28,44 @@ could create symbolic link referencing to it in `~/.local/bin` or in
 For other details run `gpaste-gui.pl -?` or look at the bottom of
 [this file](gpaste-gui.pl) where that help info is described.
 
+### Nix
+
+You can use this piece of software with
+[Nix package manager](https://nixos.org/manual/nix/stable/).
+This repository provides you a configuration for it.
+
+You can run **GPaste GUI** just like this (using `nix-shell` while your working
+directory is this repository where [shell.nix](shell.nix) can be found):
+
+``` sh
+nix-shell --run gpaste-gui
+```
+
+All the required dependencies will be provided for you automatically.
+
+### NixOS
+
+You can add this application into your NixOS `configuration.nix` like this:
+
+``` nix
+{ pkgs, ... }:
+let
+  gpaste-gui-src = pkgs.fetchFromGitHub {
+    owner = "unclechu";
+    repo = "gpaste-gui";
+    rev = "ffffffffffffffffffffffffffffffffffffffff"; # Git commit hash
+    sha256 = "0000000000000000000000000000000000000000000000000000";
+  };
+
+  gpaste-gui = pkgs.callPackage gpaste-gui-src {};
+in
+{ environment.systemPackages = [ gpaste-gui-src ]; }
+```
+
 # Author
 
 Viacheslav Lotsmanov
 
 # License
 
-[GNU/GPLv3](./LICENSE)
+[GNU/GPLv3](LICENSE)
