@@ -1,5 +1,6 @@
 # Author: Viacheslav Lotsmanov
 # License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/gpaste-gui/master/LICENSE
+
 let sources = import nix/sources.nix; in
 { callPackage
 , lib
