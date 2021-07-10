@@ -7,7 +7,7 @@ use utf8; use open ':std', ':encoding(UTF-8)';
 use experimental qw/smartmatch/;
 use Getopt::Long;
 use Pod::Usage;
-use List::Util qw/first/;
+use List::Util qw/first max/;
 use Glib qw/TRUE FALSE/;
 use Gtk2 qw/-init/;
 use Gtk2::SimpleList;
@@ -59,6 +59,66 @@ GetOptions(
 ) || fail_usage;
 
 pod2usage(-exitval => 2, -verbose => 2) if $show_help;
+
+sub show_modal {
+  my ($parent, $type, $text) = @_;
+
+  my $dialog = Gtk2::MessageDialog->new_with_markup(
+    $parent, [qw/modal destroy-with-parent/], $type, 'ok', $text
+  );
+
+  $dialog->set_title($wnd_title);
+  $dialog->set_position('center-always');
+  $dialog->signal_connect(response => sub { shift->destroy });
+  $dialog->run;
+  $dialog
+}
+
+sub warn_modal { show_modal shift, 'warning', shift }
+sub err_modal  { show_modal shift, 'error',   shift }
+
+sub dying_modal {
+  my $err_msg = shift;
+  my $dialog = err_modal undef, $err_msg;
+
+  $dialog->signal_connect(destroy => sub {
+    say STDERR $err_msg;
+    exit 1;
+  });
+}
+
+sub safe_run {
+  return @_ if $? == 0;
+  dying_modal "Child process is failed with $? status"
+}
+
+my @gpaste_version = sub {
+  chomp(my @lines = safe_run `$gpaste_bin version`);
+  my @words = split ' ', $lines[0];
+  my @ver = map { $_ + 0 } split '\.', $words[1];
+
+  dying_modal 'Unexpected result from GPaste version: “'.join("\n", @lines).'”'
+    if @lines != 1 || @words != 2 || $words[0] ne 'GPaste' || @ver < 2;
+
+  return @ver
+}->();
+
+my @uuids_version = (3,38); # Switched to UUIDs
+my @use_index_version = (3,38,5); # Introduced “--use-index” argument
+
+sub version_is_reached {
+  my @version_to_reach = @_;
+  for (0 .. max(@gpaste_version+0, @version_to_reach+0) - 1) {
+    if (($gpaste_version[$_] || 0) > ($version_to_reach[$_] || 0)) {return 1}
+    elsif (($gpaste_version[$_] || 0) < ($version_to_reach[$_] || 0)) {return 0}
+  }
+  return 1
+}
+
+# TODO Take into use and fix bugs with newer GPaste version
+# version_is_reached @uuids_version
+# version_is_reached @use_index_version
+
 my $is_gtk_main_run = 0;
 my $exit_code;
 
@@ -95,33 +155,6 @@ sub new_okay_cancel {
   $box->add($cancel);
   $box->add($ok);
   $box
-}
-
-sub show_modal {
-  my ($parent, $type, $text) = @_;
-
-  my $dialog = Gtk2::MessageDialog->new_with_markup(
-    $parent, [qw/modal destroy-with-parent/], $type, 'ok', $text
-  );
-
-  $dialog->set_title($wnd_title);
-  $dialog->set_position('center-always');
-  $dialog->signal_connect(response => sub { shift->destroy });
-  $dialog->run;
-  $dialog
-}
-
-sub warn_modal { show_modal shift, 'warning', shift }
-sub err_modal  { show_modal shift, 'error',   shift }
-
-sub dying_modal {
-  my $err_msg = shift;
-  my $dialog = err_modal undef, $err_msg;
-
-  $dialog->signal_connect(destroy => sub {
-    say STDERR $err_msg;
-    exit 1;
-  });
 }
 
 sub input_dialog {
@@ -190,11 +223,6 @@ sub parse_password {
   my $num = $1 + 0;
   $_ = $2; /$password_reg/; $_ = $1; clear_str;
   my %result = (num => $num, contents => $_);
-}
-
-sub safe_run {
-  return @_ if $? == 0;
-  dying_modal "Child process is failed with $? status"
 }
 
 sub get_history {
