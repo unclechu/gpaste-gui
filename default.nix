@@ -2,6 +2,7 @@
 # License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/gpaste-gui/master/LICENSE
 let sources = import nix/sources.nix; in
 { callPackage
+, lib
 , perl
 , perlPackages
 , gnome3 # Just for ‘gnome3.gpaste’
@@ -37,35 +38,50 @@ let
     ${shellCheckers.fileIsExecutable gpaste-client}
   '';
 
-  patchedScript =
+  patchLines = startReg: endReg: replaceTo: srcLinse:
+    assert builtins.isString startReg;
+    assert builtins.isString endReg;
+    assert builtins.isString replaceTo;
     let
       reducer = acc: line:
         if ! isNull (builtins.match "^#!.*$" line) then (
           acc
         ) else if acc.state == "pre" then (
-          let matches = builtins.match "^(my \\$gpaste_bin) = .*$" line; in
+          let matches = builtins.match startReg line; in
           if isNull matches
           then acc // { lines = acc.lines ++ [line]; }
-          else {
-            state = "in";
-            lines = acc.lines ++ [
-              "${builtins.elemAt matches 0} = q{${gpaste-client}};"
-            ];
-          }
+          else { state = "in"; lines = acc.lines ++ [replaceTo]; }
         ) else if (acc.state == "in") then (
-          if isNull (builtins.match "^[^ ].*;$" line)
+          if isNull (builtins.match endReg line)
           then acc
           else acc // { state = "post"; }
         ) else if (acc.state == "post") then (
           acc // { lines = acc.lines ++ [line]; }
         ) else throw "Unexpected state: ${acc.state}";
 
-      initial = { lines = []; state = "pre"; };
-
-      result = builtins.foldl' reducer initial (lines __srcScript);
+      result = builtins.foldl' reducer { lines = []; state = "pre"; } srcLinse;
     in
       assert result.state == "post";
-      unlines result.lines;
+      result.lines;
+
+  patchedScript = lib.pipe __srcScript [
+    lines
+    (
+      patchLines
+        "^my \\$gpaste_bin = .*$"
+        "^[^ ].*;$"
+        "my $gpaste_bin = q{${gpaste-client}};"
+    )
+    (
+      let version = builtins.splitVersion gnome3.gpaste.version; in
+      assert builtins.all (x: builtins.seq (lib.toInt x) true) version;
+      patchLines
+        "^my @gpaste_version = .*$"
+        "^[^ ].*;$"
+        "my @gpaste_version = (${builtins.concatStringsSep "," version});"
+    )
+    unlines
+  ];
 
   perlScript = writeCheckedExecutable __name checkPhase ''
     #! ${perl-exe}
