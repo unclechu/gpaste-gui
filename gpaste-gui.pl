@@ -115,9 +115,8 @@ sub version_is_reached {
   return 1
 }
 
-# TODO Take into use and fix bugs with newer GPaste version
-# version_is_reached @uuids_version
-# version_is_reached @use_index_version
+my $using_uuids = version_is_reached @uuids_version;
+my $has_use_index = version_is_reached @use_index_version;
 
 my $is_gtk_main_run = 0;
 my $exit_code;
@@ -197,13 +196,25 @@ sub fuzzy_ins_search {
 }
 
 sub clear_str { $_ = $_[0] || $_; s/[\t\r\n ]+/ /g; s/(^\s+|\s+$)//g; $_ }
-my $item_reg = qr/^([0-9]+): (.*)$/;
+
+my $uuid_reg = qr/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/;
+
+my $item_reg
+  = $using_uuids
+  ? qr/^($uuid_reg): (.*)$/
+  : qr/^([0-9]+): (.*)$/;
+
+my $password_pre_reg
+  = $using_uuids
+  ? qr/^$uuid_reg: \[Password\] /
+  : qr/^[0-9]+: \[Password\] /;
+
 my $password_reg = qr/^\[Password\] (.+)$/;
 
 sub parse_line {
   $_ = $_[0] || $_;
   /$item_reg/;
-  my $num = $1 + 0;
+  my $grip = $1;
   $_ = $2; clear_str;
 
   if ($2 =~ /$password_reg/) {
@@ -214,22 +225,27 @@ sub parse_line {
     $_ = substr($_, 0, $real_contents_limit) . $line_more;
   }
 
-  my %result = (num => $num, contents => $_);
+  my %result = (grip => $grip, contents => $_);
 }
 
 sub parse_password {
   $_ = $_[0] || $_;
   /$item_reg/;
-  my $num = $1 + 0;
+  my $grip = $1;
   $_ = $2; /$password_reg/; $_ = $1; clear_str;
-  my %result = (num => $num, contents => $_);
+  my %result = (grip => $grip, contents => $_);
+}
+
+sub add_index {
+  my @input = @_;
+  map { my %x = %{$input[$_]}; $x{index} = $_; \%x } (0 .. @input - 1)
 }
 
 sub get_history {
   chomp(my @history = safe_run `$gpaste_bin history --oneline`);
-  my @passwords = grep { /^[0-9]+: \[Password\] / } @history;
-  @history = map { my %x = parse_line; \%x } @history;
-  @passwords = map { my %x = parse_password; \%x } @passwords;
+  my @passwords = grep { /$password_pre_reg/ } @history;
+  @history = add_index map { my %x = parse_line; \%x } @history;
+  @passwords = add_index map { my %x = parse_password; \%x } @passwords;
   my %result = (all => \@history, passwords => \@passwords);
 }
 
@@ -245,8 +261,8 @@ sub guard_non_empty_history {
 }
 
 sub mask_password_with_name {
-  my ($num, $name, @passwords) = (shift, shift, @{(shift)});
-  my $already_masked = first { $_->{num} == $num } @passwords;
+  my ($grip, $name, @passwords) = (shift, shift, @{(shift)});
+  my $already_masked = first { $_->{grip} eq $grip } @passwords;
 
   dying_modal 'Name for masking password is unexpectedly undefined'
     unless defined $name;
@@ -255,9 +271,9 @@ sub mask_password_with_name {
 
   if (defined $already_masked) {
     safe_run system
-      $gpaste_bin, 'rename-password', $already_masked->{contents}, $name
+      $gpaste_bin, 'rename-password', '--', $already_masked->{contents}, $name
   } else {
-    safe_run system $gpaste_bin, 'set-password', $num, $name
+    safe_run system $gpaste_bin, 'set-password', '--', $grip, $name
   }
 }
 
@@ -287,8 +303,8 @@ sub generic_select_from_history {
   @{$list->{data}} = do {
     my $f =
       $select_by_numbers ?
-        sub { [$_->{num}, $item_text_prefix . $_->{contents}] } :
-        sub { [$item_text_prefix . $_->{contents}, $_->{num}] };
+        sub { [$_->{index}, $item_text_prefix . $_->{contents}] } :
+        sub { [$item_text_prefix . $_->{contents}, $_->{grip}] };
 
     map { $f->() } @history;
   };
@@ -436,7 +452,7 @@ sub select_from_history {
 
   generic_select_from_history 'select', '', 0, $history{all}, sub {
     my %selected = %{(shift)};
-    safe_run `$gpaste_bin select $selected{num}`;
+    safe_run `$gpaste_bin select -- '$selected{grip}'`;
     end_gtk_main
   }
 }
@@ -450,13 +466,13 @@ sub delete_from_history {
     my @selected = @{(shift)};
 
     mask_password_with_name
-      $_->{num},
-      $gen_pass_name->($_->{num}),
+      $_->{grip},
+      $gen_pass_name->($_->{grip}),
       $history{passwords}
         for @selected;
 
     safe_run system
-      $gpaste_bin, 'delete-password', $gen_pass_name->($_->{num})
+      $gpaste_bin, 'delete-password', '--', $gen_pass_name->($_->{grip})
         for @selected;
 
     end_gtk_main
@@ -470,7 +486,7 @@ sub select_a_password_from_history {
   generic_select_from_history
     'select password', '🔑 ', 0, $history{passwords}, sub {
       my %selected = %{(shift)};
-      safe_run `$gpaste_bin select $selected{num}`;
+      safe_run `$gpaste_bin select -- '$selected{grip}'`;
       end_gtk_main
     }
 }
@@ -484,7 +500,7 @@ sub mask_a_password {
       my %selected = %{(shift)};
       my @passwords = @{$history{passwords}};
       my $wnd = shift;
-      my $found_pass = first { $_->{num} == $selected{num} } @passwords;
+      my $found_pass = first { $_->{grip} eq $selected{grip} } @passwords;
 
       my $title =
         defined($found_pass) ?
@@ -500,7 +516,7 @@ sub mask_a_password {
           1;
 
       return 'continue' unless defined $pass_name;
-      mask_password_with_name $selected{num}, $pass_name, $history{passwords};
+      mask_password_with_name $selected{grip}, $pass_name, $history{passwords};
       end_gtk_main
     }
 }
@@ -512,7 +528,7 @@ sub mask_last_password {
 
   my $is_pass =
     scalar(@{$history{passwords}}) > 0 &&
-    $history{passwords}->[0]->{num} == $last{num};
+    $history{passwords}->[0]->{grip} eq $last{grip};
 
   %last = %{$history{passwords}->[0]} if $is_pass;
 
@@ -525,7 +541,7 @@ sub mask_last_password {
       $history{passwords},
       $is_pass ? $last{contents} : undef;
 
-  mask_password_with_name $last{num}, $pass_name, $history{passwords};
+  mask_password_with_name $last{grip}, $pass_name, $history{passwords};
   end_gtk_main
 }
 
@@ -571,7 +587,7 @@ sub rename_a_password {
       \@passwords,
       $old_item{contents};
 
-  mask_password_with_name $old_item{num}, $new_name, $history{passwords};
+  mask_password_with_name $old_item{grip}, $new_name, $history{passwords};
   end_gtk_main
 }
 
@@ -593,25 +609,47 @@ sub select_and_rename_a_password {
           1;
 
       return 'continue' unless defined $new_name;
-      mask_password_with_name $selected{num}, $new_name, $history{passwords};
+      mask_password_with_name $selected{grip}, $new_name, $history{passwords};
       end_gtk_main
     }
 }
 
 sub heal_clipboard {
   my %history = get_history;
+  my $use_index_flag = $has_use_index ? '--use-index' : '';
+
+  # It doesn’t not make any sense to “heal” anything if there is nothing in
+  # clipboard history.
   guard_non_empty_history \%history;
 
   if (scalar(@{$history{all}}) >= 2) {
-    safe_run `$gpaste_bin select 1`;
-    safe_run `$gpaste_bin select 1`;
+    if ($using_uuids && !$use_index_flag) {
+      my @items = @{$history{all}};
+      my %item0 = %{$items[0]};
+      my %item1 = %{$items[1]};
+      safe_run `$gpaste_bin select -- '$item1{grip}'`;
+      safe_run `$gpaste_bin select -- '$item0{grip}'`;
+    } else {
+      safe_run `$gpaste_bin $use_index_flag select 1`;
+      safe_run `$gpaste_bin $use_index_flag select 1`;
+    }
   } else {
     safe_run system
       $gpaste_bin, 'add', '--',
       "--gpaste-gui.pl heal clipboard plug @{[time(), rand()]}--";
 
-    safe_run `$gpaste_bin select 1`;
-    safe_run `$gpaste_bin delete 1`;
+    if ($using_uuids && !$use_index_flag) {
+      %history = get_history;
+      my @items = @{$history{all}};
+      my %item0 = %{$items[0]};
+      my %item1 = %{$items[1]};
+
+      safe_run `$gpaste_bin select -- '$item1{grip}'`;
+      safe_run `$gpaste_bin delete -- '$item0{grip}'`;
+    } else {
+      safe_run `$gpaste_bin $use_index_flag select 1`;
+      safe_run `$gpaste_bin $use_index_flag delete 1`;
+    }
   }
 
   end_gtk_main
