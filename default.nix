@@ -6,7 +6,7 @@ let sources = import nix/sources.nix; in
 , lib
 , perl
 , perlPackages
-, gnome3 # Just for ‘gnome3.gpaste’
+, gpaste
 
 # Overridable dependencies
 , __nix-utils ? callPackage sources.nix-utils { inherit perlPackages; }
@@ -21,7 +21,7 @@ let
     shellCheckers valueCheckers;
 
   perl-exe = "${perl}/bin/perl";
-  gpaste-client = "${gnome3.gpaste}/bin/gpaste-client";
+  gpaste-client = "${gpaste}/bin/gpaste-client";
 
   deps = p: [
     p.GetoptLong
@@ -74,7 +74,7 @@ let
         "my $gpaste_bin = q{${gpaste-client}};"
     )
     (
-      let version = builtins.splitVersion gnome3.gpaste.version; in
+      let version = builtins.splitVersion gpaste.version; in
       assert builtins.all (x: builtins.seq (lib.toInt x) true) version;
       patchLines
         "^my @gpaste_version = .*$"

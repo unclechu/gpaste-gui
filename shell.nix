@@ -17,5 +17,5 @@ pkgs.mkShell {
 
   buildInputs =
     [ gpaste-gui ]
-    ++ pkgs.lib.optional (! use-system-gpaste-client) pkgs.gnome3.gpaste;
+    ++ pkgs.lib.optional (! use-system-gpaste-client) pkgs.gpaste;
 }
